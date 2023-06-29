@@ -1,10 +1,63 @@
 import os
 import re
+import requests
 import numpy as np
 import matplotlib.pyplot as plt
 
-def format_table(revenues, ret=True, disp = False):
-    revenues = table_info[0].replace('\n', '').replace('\t', '').replace(' ', '').replace('$', '').strip()
+
+class Ticker:
+    '''
+    This class will load business data and analyze a stock. Data is from the site macrotrends.com.
+    '''
+
+    def __init__(self, ticker, name):
+        self._ticker = ticker
+        self._name = name
+
+    def __repr__(self):
+        print(f"Ticker: {self.get_ticker}")
+
+    @property
+    def ticker(self):
+        self._ticker = ticker
+
+    @property
+    def name(self):
+        self._name = name
+
+    def get_data(self):
+        site = f"https://www.macrotrends.net/stocks/charts/{self._ticker}/{self._name}/eps-earnings-per-share-diluted"
+        data = requests.get(site).text
+        tables_start = re.findall(r"<table.*?>", data)
+        tables_end = re.findall(r"</table>", data)
+        tables_start
+
+        table_info = []
+        n1 = 0;n2 = 0;n3 = 0
+        for i in range(len(tables_start)):
+            n1 += data[n3:].find(tables_start[i]) + n3
+            n2 += n1 + len(tables_start[i])
+            n3 += data[n3:].find(tables_end[i]) + n3
+            table_info.append(data[n2:n3])    
+
+        
+        shares = format_table(table_info[0])
+        array_shares = html_table_to_array(shares)
+
+        self._eps = array_shares
+
+    def plot_eps(self):
+        plt.plot(self._eps[:,0], self._eps[:,1], label='EPS');
+        plt.legend()
+        plt.xlim([self._eps[0,0], self._eps[-1,0]])
+        plt.show()
+
+
+
+
+
+def format_table(table_info, ret=True, disp = False):
+    revenues = table_info.replace('\n', '').replace('\t', '').replace(' ', '').replace('$', '').strip()
 
     # Remove table head
     revenues = re.sub(r"(<thead.*?>)(.*?)(</thead>)", r"", revenues)
@@ -95,8 +148,6 @@ for i in range(6):
     table_info.append(data[n2:n3])
     
 revenues = format_table(table_info[0])
-
-revenues = format_table(table_info[0], disp=False)
 
 array_shares = html_table_to_array(revenues)
 
