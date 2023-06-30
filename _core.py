@@ -9,146 +9,75 @@ class Ticker:
     '''
     This class will load business data and analyze a stock. Data is from the site macrotrends.com.
     '''
+    metrics = {
+        "eps": "eps-earnings-per-share-diluted",
+        "equity": "total-share-holder-equity",
+        "cash_flow": "cash-flow-from-operating-activities",
+        "shares": "shares-outstanding",
+        "revenue": "revenue",
+        "price": "stock-price-history"
+    }
 
-    def __init__(self, ticker, name):
+    def __init__(self, ticker):
         self._ticker = ticker
-        self._name = name
 
-    def __repr__(self):
-        print(f"Ticker: {self.get_ticker}")
+    def get_html_content(self, metric):
+        site = r"https://www.macrotrends.net/stocks/charts/" + self._ticker + "//" + metric
+        return requests.get(site).text
+    
+    def get_tables(self, html_content):
+        return re.findall(r"(<table.*?>.*?</table>)", html_content, re.DOTALL)
 
-    @property
-    def ticker(self):
-        self._ticker = ticker
+    def str2int(self, string):
+        try:
+            return int(''.join(re.findall(r"-?[\d]", string)))
+        except:
+            return 0
 
-    @property
-    def name(self):
-        self._name = name
+    def get_table_content(self, table):
+        table_content = []
+        for row in re.findall(r"(<tr.*?>.*?</tr>)", table, re.DOTALL):
+            new_row = re.findall(r"<td.*?>(.*?)</td>", row, re.DOTALL)
+            if len(new_row) > 0:
+                table_content.append([self.str2int(num) for num in new_row])
 
-    def get_data(self):
-        site = f"https://www.macrotrends.net/stocks/charts/{self._ticker}/{self._name}/eps-earnings-per-share-diluted"
-        data = requests.get(site).text
-        tables_start = re.findall(r"<table.*?>", data)
-        tables_end = re.findall(r"</table>", data)
-        tables_start
-
-        table_info = []
-        n1 = 0;n2 = 0;n3 = 0
-        for i in range(len(tables_start)):
-            n1 += data[n3:].find(tables_start[i]) + n3
-            n2 += n1 + len(tables_start[i])
-            n3 += data[n3:].find(tables_end[i]) + n3
-            table_info.append(data[n2:n3])    
-
+        array = np.array(table_content)
         
-        shares = format_table(table_info[0])
-        array_shares = html_table_to_array(shares)
+        return array[np.argsort(array[:,0]), :]
 
-        self._eps = array_shares
+    def process_all(self, metric, column=1):
+        html_content = self.get_html_content(metric)
+        return self.get_table_content(self.get_tables(html_content)[0])[:,column]
 
-    def plot_eps(self):
-        plt.plot(self._eps[:,0], self._eps[:,1], label='EPS');
+    def load_data(self):
+        self._shares = self.process_all(Ticker.metrics['shares'])
+        self._eps = self.process_all(Ticker.metrics["eps"])
+        self._equity = self.process_all(Ticker.metrics['equity'])
+        self._equitypershare = self._equity / self._shares
+        self._cash_flow = self.process_all(Ticker.metrics["cash_flow"])
+        self._ocfps = self._cash_flow / self._shares
+        self._revenue = self.process_all(Ticker.metrics['revenue'])
+        self._year = np.array(self.process_all(Ticker.metrics['eps'], column=0), dtype='int')
+
+    def plot_moat(self):
+        plt.plot(self._year, self._eps / np.max(self._eps), label='EPS')
+        plt.plot(self._year, self._equitypershare / np.max(self._equitypershare), label='Equity/Share')
+        plt.plot(self._year, self._ocfps / np.max(self._ocfps), label='OCFPS')
+        plt.plot(self._year, self._revenue / np.max(self._revenue), label='Revenue')
+        plt.xlim(min(self._year), max(self._year))
+        plt.xlabel('Year')
+        plt.title('Moat Plot')
         plt.legend()
-        plt.xlim([self._eps[0,0], self._eps[-1,0]])
         plt.show()
 
+    def stock_price(self):
+        self._prices = self.process_all('stock-price-history')
+        self._current = self._prices[-1]
+
+    def buy(self):
+        if self._equitypershare[-1] > self._current:
+            print(f"{self._ticker}: BUY!!!")
 
 
 
 
-def format_table(table_info, ret=True, disp = False):
-    revenues = table_info.replace('\n', '').replace('\t', '').replace(' ', '').replace('$', '').strip()
-
-    # Remove table head
-    revenues = re.sub(r"(<thead.*?>)(.*?)(</thead>)", r"", revenues)
-
-    # Remove table and tbody tags
-    revenues = re.sub(r"<tbody>|</tbody>", "", revenues)
-    revenues = re.sub(r"<table>|</table>", "", revenues)
-
-
-    # Remove any styling options
-    revenues = re.sub(r"(<td)(.*?)(>)", "<td>", revenues)
-    revenues = re.sub(r"(<th)(.*?)(>)", "<td>", revenues)
-    revenues = re.sub(r"<span.*?>|</span>", "", revenues)
-
-    # Add table tags
-    revenues = r"<table>" + revenues + r"</table>"
-
-    # Add newline characters
-    revenues = re.sub(r"<tr>", r"\t<tr>\n", revenues)
-    revenues = re.sub(r"(<td.*?/td>)", r"\t\t\1\n", revenues)
-    revenues = re.sub(r"</tr>", r"\t</tr>\n", revenues)
-    revenues = re.sub(r"<table>", r"<table>\n", revenues)
-    
-    if disp:
-        print(revenues)
-    
-    if ret:
-        return revenues
-    
-def str2num(string):
-    if '.' in string:
-        return float(string.replace(',', ''))
-    else:
-        return int(string.replace(',', ''))
-    
-def get_table_size(table):
-    m = len(re.findall(r"<tr>", table))
-    n = int(len(re.findall(r"<td>", table)) / m)
-    return m, n
-
-def html_table_to_array(table):
-    data = re.findall(r"<td>(.*?)</td>", table)
-    m, n = get_table_size(table)
-    
-    array = np.array([float('nan')] * m * n).reshape(m,n)
-    count = 0
-    for i in range(m):
-        for j in range(n):
-            array[i,j] = str2num(data[count])
-            count += 1
-            
-    
-    
-    return array[np.argsort(array[:,0]),:]
-
-
-def process(site, name):
-    data = requests.get(site).text
-    tables_start = re.findall(r"<table.*?>", data)
-    tables_end = re.findall(r"</table>", data)
-    tables_start
-
-    table_info = []
-    n1 = 0;n2 = 0;n3 = 0
-    for i in range(6):
-        n1 += data[n3:].find(tables_start[i]) + n3
-        n2 += n1 + len(tables_start[i])
-        n3 += data[n3:].find(tables_end[i]) + n3
-        #print(n1, n2, n3)
-        table_info.append(data[n2:n3])
-
-    
-
-example = '''
-data = requests.get(r'https://www.macrotrends.net/stocks/charts/TXT/textron/shares-outstanding').text
-
-tables_start = re.findall(r"<table.*?>", data)
-tables_end = re.findall(r"</table>", data)
-tables_start
-
-table_info = []
-n1 = 0;n2 = 0;n3 = 0
-for i in range(6):
-    n1 += data[n3:].find(tables_start[i]) + n3
-    n2 += n1 + len(tables_start[i])
-    n3 += data[n3:].find(tables_end[i]) + n3
-    #print(n1, n2, n3)
-    table_info.append(data[n2:n3])
-    
-revenues = format_table(table_info[0])
-
-array_shares = html_table_to_array(revenues)
-
-plt.plot(array_revenues[:,0], array_revenues[:,1]);'''
