@@ -30,7 +30,7 @@ class Ticker:
 
     def str2int(self, string):
         try:
-            return int(''.join(re.findall(r"-?[\d]", string)))
+            return float(''.join(re.findall(r"[-\d.\d]", string)))
         except:
             return 0
 
@@ -46,18 +46,29 @@ class Ticker:
         return array[np.argsort(array[:,0]), :]
 
     def process_all(self, metric, column=1):
-        html_content = self.get_html_content(metric)
-        return self.get_table_content(self.get_tables(html_content)[0])[:,column]
+        try:
+            html_content = self.get_html_content(metric)
+            return self.get_table_content(self.get_tables(html_content)[0])[:,column]
+        except:
+            return np.array([[0]])
+
 
     def load_data(self):
         self._shares = self.process_all(Ticker.metrics['shares'])
         self._eps = self.process_all(Ticker.metrics["eps"])
         self._equity = self.process_all(Ticker.metrics['equity'])
-        self._equitypershare = self._equity / self._shares
         self._cash_flow = self.process_all(Ticker.metrics["cash_flow"])
-        self._ocfps = self._cash_flow / self._shares
         self._revenue = self.process_all(Ticker.metrics['revenue'])
         self._year = np.array(self.process_all(Ticker.metrics['eps'], column=0), dtype='int')
+
+        try:
+            self._equitypershare = self._equity / self._shares
+        except:
+            self._equitypershare = np.arange(len(self._shares))
+        try:
+            self._ocfps = self._cash_flow / self._shares
+        except:
+            self._ocfps = np.arange(len(self._shares)) / self._shares
 
     def plot_moat(self):
         plt.plot(self._year, self._eps / np.max(self._eps), label='EPS')
@@ -66,7 +77,7 @@ class Ticker:
         plt.plot(self._year, self._revenue / np.max(self._revenue), label='Revenue')
         plt.xlim(min(self._year), max(self._year))
         plt.xlabel('Year')
-        plt.title('Moat Plot')
+        plt.title(f'Moat Plot of {self._ticker}')
         plt.legend()
         plt.show()
 
@@ -75,8 +86,12 @@ class Ticker:
         self._current = self._prices[-1]
 
     def buy(self):
-        if self._equitypershare[-1] > self._current:
-            print(f"{self._ticker}: BUY!!!")
+        try:
+            if self._equitypershare[-1] > self._current:
+                print(f"{self._ticker}: BUY!!!")
+                print(round(self._equitypershare[-1], 2), round(self._current, 2))
+        except:
+            print(f"Could not compare {self._ticker}")
 
 
 
